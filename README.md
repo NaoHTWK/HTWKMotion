@@ -9,7 +9,7 @@ The walking engine is designed to be used with our [LolaConnector](https://githu
 It also includes some auxiliary libraries for moving the arms and sitting down.
 
 Integration of the walking engine in LolaConnector could look like this:
-```
+```c++
 if (client_connected && !lola_shutdown && !lola_sit_forever) {
     if (!sit_motion.isStanding()) {
         joints.legs = sit_motion.getUp(sensor_frame.joints.legs, ankle_balancer, &arm_controller);
@@ -36,11 +36,11 @@ if (client_connected && !lola_shutdown && !lola_sit_forever) {
 To make the robot walk just call `walking_engine.setRequest()`.
 
 To build:
-```
-> mkdir build
-> cd build
-> cmake .. -DCMAKE_TOOLCHAIN_FILE=../YOUR-cross-config.cmake
-> make
+```bash
+mkdir build
+cd build
+cmake .. -DCMAKE_TOOLCHAIN_FILE=../YOUR-cross-config.cmake
+make
 ```
 
 An example `cross-config.cmake` can be found in our LolaConnector project.
@@ -63,8 +63,8 @@ are met:
 
 3. The end-user documentation included with the redistribution, if 
    any, must include the following acknowledgment:
-   "This product includes software developed by Nao-Team HTWK
-   ([htwk-robots.de](http://www.htwk-robots.de))."
+   _"This product includes software developed by Nao-Team HTWK
+   ([htwk-robots.de](http://www.htwk-robots.de))."_
    Alternately, this acknowledgment may appear in the software 
    itself, if and wherever such third-party acknowledgments 
    normally appear.
@@ -79,7 +79,7 @@ are met:
    Nao-Team HTWK via GitHub pull requests
    (https://github.com/NaoHTWK).
 
-THIS SOFTWARE IS PROVIDED BY NAO-TEAM HTWK ``AS IS'' AND ANY
+THIS SOFTWARE IS PROVIDED BY NAO-TEAM HTWK "AS IS" AND ANY
 EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
 THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A 
 PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL 
