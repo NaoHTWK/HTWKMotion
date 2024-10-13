@@ -13,7 +13,7 @@ class AnkleBalancer {
 
   private:
     float forward_gyro_gain = 0.05f;
-    float backward_gyro_gain = 0.1f;
+    float backward_gyro_gain = 0.12f;
     float roll_gyro_gain = 0.06f;
 
 };

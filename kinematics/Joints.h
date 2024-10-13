@@ -11,7 +11,7 @@ struct Joints {
 	const LegJoints rightLeg;
 	const float hipYawPitch;
 
-    Joints(LegJoints _leftLeg, LegJoints _rightLeg)
+    Joints(const LegJoints& _leftLeg, const LegJoints& _rightLeg)
         : leftLeg(_leftLeg)
         , rightLeg(_rightLeg)
         , hipYawPitch((leftLeg.hipYawPitch + rightLeg.hipYawPitch) / 2.0f) {

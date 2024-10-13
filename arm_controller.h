@@ -1,16 +1,20 @@
 #pragma once
 
 #include <array>
+#include <cmath>
 
 #include <joints.h>
 
 class ArmController {
   public:
-    enum class ArmRequest { UNSTIFF, FRONT, BACK };
+    enum class ArmRequest { UNSTIFF, FRONT, SIDE, BACK };
     ArmRequest request = ArmRequest::UNSTIFF;
     bool isFront() { return state <= -1.f; }
+    bool isSide() { return std::abs(state) < -0.01f; }
     bool isBack() { return state >= 1.f; }
     ArmJoints proceed();
+    void updateState();                 // set state back to default, when motion finished normaly
+    void updateState(ArmJoints arms);   // set state depending on arm position
 
   private:
     float state = -1.f;

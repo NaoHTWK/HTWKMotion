@@ -1,5 +1,6 @@
 #pragma once
 
+#include <joints.h>
 #include <point_3d.h>
 
 struct YPR {
@@ -29,6 +30,15 @@ struct YawPitch {
 
     YawPitch() = default;
     YawPitch(float yaw, float pitch) : yaw(yaw), pitch(pitch) {}
+    YawPitch(HeadJointAngles angles) : yaw(angles[0]), pitch(angles[1]) {}
+
+    YawPitch operator-(const YawPitch &o) {
+        return {yaw - o.yaw, pitch - o.pitch};
+    }
+
+    YawPitch operator+(const YawPitch &o) {
+        return {yaw + o.yaw, pitch + o.pitch};
+    }
 };
 
 struct IMU {

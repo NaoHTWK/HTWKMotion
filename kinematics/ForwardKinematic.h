@@ -1,7 +1,8 @@
 #ifndef FORWARDKINEMATIC_H_
 #define FORWARDKINEMATIC_H_
+
 #include <Joints.h>
-#include <joints.h>
+#include <../utils/joints.h>
 #include <PositionFeet.h>
 namespace kinematics {
 

@@ -8,16 +8,27 @@
 #include <LegPositionPlain.h>
 #include <PositionPlain.h>
 #include <joints.h>
+// #include <sound_player.h>
 #include <stl_ext.h>
+// #include <visualizer.h>
+#include "kalman_filter.h"
 
 using namespace std;
 using namespace htwk;
 
-float WalkingEngine::max_forward = 0.28f;
+float WalkingEngine::step_duration = 0.255f;
+float WalkingEngine::max_forward = 0.35f;
 float WalkingEngine::max_backward = 0.25f;
-float WalkingEngine::max_strafe = 0.35f;
+float WalkingEngine::max_strafe = 0.38f;
+float WalkingEngine::max_strafe_unsafe = 0.45f;
 float WalkingEngine::max_turn = 1.7f;
-float WalkingEngine::velocity_combination_damping = 0.3f;
+float WalkingEngine::velocity_combination_damping = 1.f;
+float WalkingEngine::max_acceleration_forward = 0.47f;  // m/s/s
+float WalkingEngine::max_deceleration_forward = 0.235f;  // m/s/s
+float WalkingEngine::max_acceleration_side = 0.49f;     // m/s/s
+float WalkingEngine::max_acceleration_turn = 3.92f;      // rad/s/s
+
+static void play_sound_file(const char * s) { /* please provide your own implementation */ }
 
 float parabolicReturn(float f) {
     if (f < 0.25f) {
@@ -43,27 +54,9 @@ float WalkingEngine::get_spline_value(float t, float* spline) {
 
 // positive is left foot
 float WalkingEngine::calcSupportFoot(FSR fsr) {
-    static constexpr float max_pressure = 5.0f;
-    static const FSR weights{.left = {0.8f, 0.3f, 0.8f, 0.3f}, .right = {-0.3f, -0.8f, -0.3f, -0.8f}};
-    float total = 0;
-    float weighted = 0;
-    for (Foot* f : {&fsr.left, &fsr.right}) {
-        for (float* v : {&f->fl, &f->fr, &f->rl, &f->rr}) {
-            *v = min(max_pressure, *v);
-            float* m = (float*)&fsr_max_values + ((float*)v - (float*)&fsr);
-            float* w = (float*)&weights + ((float*)v - (float*)&fsr);
-            *m = max(*v, *m);
-            if (*m > 0.f) {
-                *v /= *m;
-                total += *v;
-                weighted += *w * *v;
-            }
-        }
-    }
-    if (total == 0) {
-        return 0;
-    }
-    return weighted / total;
+    float left = fsr.left.fl + fsr.left.fr + fsr.left.rl + fsr.left.rr;
+    float right = fsr.right.fl + fsr.right.fr + fsr.right.rl + fsr.right.rr;
+    return (left - right) / (left + right);
 }
 
 float WalkingEngine::linearParameterChange(float in, float target, float delta) {
@@ -85,7 +78,11 @@ void WalkingEngine::detect_and_proceed_phase_switch(const FSR& fsr) {
         (sgn(new_support_foot_prediction) != sgn(support_foot) && t > min_rel_step_duration) ||
         (abs(dx) + abs(dy) + abs(da) < 0.001f && abs(dx_request) + abs(dy_request) + abs(da_request) >= 0.001f)) {
         switch_phase = t < min_rel_step_duration ? 1.f : t;
-        support_foot = new_support_foot_prediction;
+        if (abs(dx) + abs(dy) + abs(da) < 0.001f){
+            support_foot = dy_request > 0?-1:1;
+        }else{
+            support_foot = new_support_foot_prediction;
+        }
         if (t > max_rel_step_duration * step_duration_factor &&
             abs(dx_request) + abs(dy_request) + abs(da_request) >= 0.001f) {
             if (step_duration_factor * max_rel_step_duration > 0.95f) {
@@ -95,6 +92,7 @@ void WalkingEngine::detect_and_proceed_phase_switch(const FSR& fsr) {
         } else {
             step_duration_factor = 1;
         }
+        float accel_fac = std::min(1.f, t) * step_duration;
         t = 0;
 
         last_dx_left = dx_left;
@@ -103,20 +101,32 @@ void WalkingEngine::detect_and_proceed_phase_switch(const FSR& fsr) {
         last_dy_right = dy_right;
         last_da_left = da_left;
         last_da_right = da_right;
-        if (dx < dx_request * step_duration) {
-            dx = min(dx_request * step_duration, dx + max_acceleration_forward * step_duration);
-        } else if (dx > dx_request * step_duration) {
-            dx = max(dx_request * step_duration, dx - max_deceleration_forward * step_duration);
+        point_3d delta_req{dx_request * step_duration - dx,
+                           dy_request * step_duration - dy,
+                           da_request * step_duration - da};
+        if (delta_req.norm() > 0) {
+            point_3d delta_rel{delta_req.x / (delta_req.x > 0 ? max_acceleration_forward : max_deceleration_forward) / accel_fac,
+                               delta_req.y / max_acceleration_side / accel_fac,
+                               delta_req.z / max_acceleration_turn / accel_fac};
+            float delta_fac = 1.f / std::max(1.f, delta_rel.norm());
+            dx += delta_req.x * delta_fac;
+            dy += delta_req.y * delta_fac;
+            da += delta_req.z * delta_fac;
         }
-        if (dy < dy_request * step_duration) {
-            dy = min(dy_request * step_duration, dy + max_acceleration_side * step_duration);
-        } else if (dy > dy_request * step_duration) {
-            dy = max(dy_request * step_duration, dy - max_acceleration_side * step_duration);
+        if(shoot_cooldown_count>0){
+            shoot_cooldown_count-=1;
+            shoot_active=0;
         }
-        if (da < da_request * step_duration) {
-            da = min(da_request * step_duration, da + max_acceleration_turn * step_duration);
-        } else if (da > da_request * step_duration) {
-            da = max(da_request * step_duration, da - max_acceleration_turn * step_duration);
+        if(shoot_cooldown_count<=0&&shoot_request>0&&support_foot*shoot_request_side>0){
+            shoot_cooldown_count=5;
+            shoot_active=1;
+            shoot_side=shoot_request_side;
+            if(shoot_request_side>0){
+                play_sound_file("shoot01.wav");
+            }else{
+                play_sound_file("shoot02.wav");
+            }
+
         }
     }
     if (v_angle < v_angle_request) {
@@ -164,7 +174,7 @@ void WalkingEngine::update_velocities(float swing_spline_value) {
     }
 }
 
-LegJoints WalkingEngine::set_joints(float waddle_right, float waddle_left, const AnkleBalancer& ankle_balancer,
+LegJoints WalkingEngine::set_joints(float waddle_right, float waddle_left, float ankle_pitch_right ,float ankle_pitch_left, float ankle_roll_right ,float ankle_roll_left,  float extra_forward_right, float extra_forward_left, const AnkleBalancer& ankle_balancer,
                                     float step_height, const kinematics::Joints& j) {
     LegJoints result;
     result[HipYawPitch].angle = j.hipYawPitch;
@@ -195,52 +205,65 @@ LegJoints WalkingEngine::set_joints(float waddle_right, float waddle_left, const
             result[RAnkleRoll].angle += ankle_balancer.roll;
 
         }
+        result[RAnkleRoll].angle += ankle_roll_right;
+        result[LAnkleRoll].angle += ankle_roll_left;
+
+        result[RAnklePitch].angle += -ankle_pitch_right + extra_forward_right;
+        result[LAnklePitch].angle += -ankle_pitch_left + extra_forward_left;
+
+        result[RKneePitch].angle -= extra_forward_right;
+        result[LKneePitch].angle -= extra_forward_left;
     }
     set_stiffness(dynamic_body_height == body_height_stand ? 0.6f : 0.8f, &result);
     return result;
 }
 
 float WalkingEngine::deadband_filter(float min, float value, float max){
-        if(value<0) {
-            value-=min;
-            if(value>0) {
-                value=0;
-            }
-        }
-        if(value>0) {
-            value-=max;
-            if(value<0) {
-                value=0;
-            }
-        }
-        return value;
+    if(value < min) {
+        return value - min;
     }
+    if(value > max) {
+        return value - max;
+    }
+    return 0;
+}
 
 LegJoints WalkingEngine::proceed(const FSR& fsr, float body_pitch, float body_roll, const AnkleBalancer& ankle_balancer, float yaw,
-                                 Odometry* odo, ArmController* arm_controller) {
+                                 const LolaSensorFrame& sensor_frame, Odometry* odo, ArmController* arm_controller) {
+
+    //body_pitch=body_pitch*body_pitch_damping+body_pitch_raw*(1-body_pitch_damping);
+    float body_pitch_smooth = kalmanFilter.smooth(body_pitch);
+    //body_pitch=body_pitch_smooth; //TODO: activate & test smooth body pitch for smoother walking
     arm_controller->request = ArmController::ArmRequest::BACK;
 
-    float body_pitch_error=deadband_filter(body_pitch_deadband_min,body_pitch,body_pitch_deadband_max);
+    float body_pitch_error=deadband_filter(body_pitch_deadband_min,body_pitch,body_pitch_deadband_max);//   body_pitch<0.15f?min(0.f,(body_pitch-0.05f)):max(0.f,body_pitch-0.25f);
     float gyro_pitch_error=deadband_filter(-gyro_deadband,ankle_balancer.gyroPitch,gyro_deadband);
 
-    float step_duration_correction=clamp(-0.04f,-body_pitch_error*dx*step_duration_correction_gain,0.3f);
-    float vx_correction=clamp(vx_correction_min,body_pitch_error*vx_correction_bpitch_gain+gyro_pitch_error*vx_correction_gpitch_gain,vx_correction_max);
+    float step_duration_correction=clamp(-body_pitch_error*dx*step_duration_correction_gain,0.00f,0.1f);
+    float vx_correction=clamp(body_pitch_error*vx_correction_bpitch_gain+gyro_pitch_error*vx_correction_gpitch_gain,vx_correction_min,vx_correction_max);
     float step_height_correction=0;
-    vx_correction_smooth=linearParameterChange(vx_correction_smooth,vx_correction,vx_correction_step);
+    if(shoot_active==0){
+        vx_correction_smooth=linearParameterChange(vx_correction_smooth,vx_correction,vx_correction_step);
+//        step_height_correction=clamp(abs(body_pitch_error*step_height_correction_gain),0.0f,step_height_correction_max);
+    }else{
+        vx_correction_smooth=linearParameterChange(vx_correction_smooth,0,vx_correction_step);
+    }
 
     detect_and_proceed_phase_switch(fsr);
 
-    float stairway_vx_correction=0;
+    float stairway_vx_correction=vx_correction_smooth*stairway_vx_correction_factor;
 
     float step_height = basic_step_height + forward_step_height * abs(dx) / step_duration+step_height_correction;
 
     if (abs(dx) + abs(dy) + abs(da) < 0.001f ) {
+        //t = 0.6;
         dynamic_body_height_delay_counter=linearParameterChange(dynamic_body_height_delay_counter, dynamic_body_height_delay, 1);
-        step_height_factor = linearParameterChange(step_height_factor,0,0.04);
+        step_height_factor = linearParameterChange(step_height_factor,0,0.08);
     }else{
         dynamic_body_height_delay_counter=0;
-        step_height_factor = linearParameterChange(step_height_factor,1,0.02);
+        step_height_factor = linearParameterChange(step_height_factor,1,0.04);
     }
+    //body_shift_x=clamp(body_shift_x+(fsr_ratio*(fsr.left.fl+fsr.left.fr+fsr.right.fl+fsr.right.fr)-(1-fsr_ratio)*(fsr.left.rl+fsr.left.rr+fsr.right.rl+fsr.right.rr))*dynamic_fsr_body_shift_factor/frames_per_second,-0.02f,0.01f);
     step_height*=step_height_factor;
     if(dynamic_body_height_delay_counter>=dynamic_body_height_delay){
         dynamic_body_height = linearParameterChange(dynamic_body_height, body_height_stand, 0.0001f);
@@ -249,8 +272,8 @@ LegJoints WalkingEngine::proceed(const FSR& fsr, float body_pitch, float body_ro
     }
 
     float swing_factor = parabolicReturn(min(1.f, t));
-    float swing_height = - swing_factor* step_height;
-    float support_height = - parabolicReturn(min(1.f, t * support_recover_factor + switch_phase)) * step_height;
+    float swing_height = -swing_factor* step_height;
+    float support_height = -parabolicReturn(min(1.f, t * support_recover_factor + switch_phase)) * step_height;
     float odo_forward = -(support_foot > 0 ? dx_left : dx_right);
     float odo_left = -(support_foot > 0 ? dy_left : dy_right);
     float swing_spline_value = get_spline_value(min(t, 1.f), swing_spline);
@@ -262,8 +285,8 @@ LegJoints WalkingEngine::proceed(const FSR& fsr, float body_pitch, float body_ro
     odo_forward += support_foot > 0 ? dx_left : dx_right;
     odo_left += support_foot > 0 ? dy_left : dy_right;
     odo->apply(-odo_forward, -odo_left, yaw);  // negate because support_foot moves backwards
-
-    float hip_swing = 0.f;
+    float phase= tSmooth+(support_foot > 0?1:0);
+    float hip_swing = (hip_swing_gain*step_height_factor+abs(dy)*hip_swing_side_gain)*sin(M_PI*phase+hip_swing_phase);
     float side_left = -dy_left - 0.05f + (da_left - da_right) * 0.06f - fabs(da_left - da_right) * 0.03f +
                       hip_swing;  // TODO um Ball drehen fix
     float side_right = -dy_right + 0.05f - (da_left - da_right) * 0.06f + fabsf(da_left - da_right) * 0.03f + hip_swing;
@@ -273,27 +296,100 @@ LegJoints WalkingEngine::proceed(const FSR& fsr, float body_pitch, float body_ro
     float waddle_left = step_height > 0 ? support_left / step_height * waddle_gain : 0;
     float waddle_right = step_height > 0 ? support_right / step_height * waddle_gain : 0;
 
-    float body_shift_x_target = clamp(-max_deceleration_forward * step_duration, dx_request * step_duration - dx,
+    float body_shift_x_target = stand_body_shift_x_offset*clamp(1.f-dx_request/max_forward,0.f,1.f)+clamp(dx_request * step_duration - dx,
+                                      -max_deceleration_forward * step_duration,
                                       max_acceleration_forward * step_duration) *
-                                body_shift_amp + max(0.f,dy*da*body_shift_x_when_turn_factor);
+                                body_shift_amp + min(0.f,dy*da*body_shift_x_when_turn_factor);
     body_shift_x = body_shift_x * body_shift_smoothing + (1 - body_shift_smoothing) * body_shift_x_target;
 
-    float body_shift_y = body_roll * (-0.032f + 0.09f * min(1.f, abs(dy) / 0.35f)) * body_shift_y_gyro_gain;
-    float distance_x = dx_left - dx_right;
-    float body_shift_x_correction=sin((t+body_shift_x_phase)*M_PI*2.f)*body_shift_x_gain*dx;
-    float body_shift_y_correction=sin((t+body_shift_y_phase)*M_PI*2.f)*body_shift_y_gain*dy;
 
-    kinematics::LegPositionPlain footL(true, dx_left + body_offset_x + body_shift_x + body_shift_x_correction, side_left + body_shift_y + body_shift_y_correction,
-                                       support_left - distance_x * (stairway_gain+stairway_vx_correction), 0.05f, 0.f);
-    kinematics::LegPositionPlain footR(false, dx_right + body_offset_x + body_shift_x + body_shift_x_correction, side_right + body_shift_y + body_shift_y_correction,
-                                       support_right + distance_x * (stairway_gain+stairway_vx_correction), 0.05f, 0.f);
-    kinematics::PositionPlain feet = kinematics::PositionPlain(footL, footR, da_right - da_left - v_angle);
-    kinematics::Joints j = kinematics::InverseKinematics::setFeetRelToPlane(feet, dynamic_body_height);
+    //float body_shift_y = body_roll * (-0.032f + 0.09f * min(1.f, abs(dy) / 0.35f)) * body_shift_y_gyro_gain;
+    float body_shift_y = body_roll*body_shift_y_roll;//body_roll * (-0.032f + 0.09f * min(1.f, abs(dy) / 0.35f)) * body_shift_y_gyro_gain;
+    //float distance_x = dx_left - dx_right;
+    float body_shift_x_correction=sin((tSmooth+body_shift_x_phase)*M_PI*2.f)*body_shift_x_gain*dx;
+    float body_shift_y_correction=0;//sin((tSmooth+body_shift_y_phase)*M_PI*2.f)*body_shift_y_gain*dy;
+
+    float shoot_factor = parabolicReturn(clamp((tSmooth+0.5f-shoot_phase)/max(0.05f,shoot_time), 0.f, 1.f));
+    float shoot_x_left=shoot_active*(shoot_side<0?shoot_factor*shoot_shift_x*step_height_factor:shoot_factor*shoot_compensate_x*step_height_factor);
+    float shoot_x_right=shoot_active*(shoot_side>0?shoot_factor*shoot_shift_x*step_height_factor:shoot_factor*shoot_compensate_x*step_height_factor);
+    float shoot_ankle_pitch_left=shoot_active*(shoot_side<0?shoot_factor*shoot_pitch*step_height_factor:shoot_factor*shoot_compensate_pitch*step_height_factor);
+    float shoot_ankle_pitch_right=shoot_active*(shoot_side>0?shoot_factor*shoot_pitch*step_height_factor:shoot_factor*shoot_compensate_pitch*step_height_factor);
+
+    float extra_forward_left=shoot_active*(shoot_side<0?shoot_factor*shoot_knee*step_height_factor:0);
+    float extra_forward_right=shoot_active*(shoot_side>0?shoot_factor*shoot_knee*step_height_factor:0);
+
+    float shoot_start_factor = parabolicReturn(clamp((t+0.5f-shoot_start_phase)/max(0.05f,shoot_start_time), 0.f, 1.f));
+
+    shoot_x_left+=shoot_active*(shoot_side<0?shoot_start_factor*shoot_start_shift_x*step_height_factor:0);
+    shoot_x_right+=shoot_active*(shoot_side>0?shoot_start_factor*shoot_start_shift_x*step_height_factor:0);
+    shoot_ankle_pitch_left+=shoot_active*(shoot_side<0?shoot_start_factor*shoot_start_pitch*step_height_factor:0);
+    shoot_ankle_pitch_right+=shoot_active*(shoot_side>0?shoot_start_factor*shoot_start_pitch*step_height_factor:0);
+
+    extra_forward_left+=shoot_active*(shoot_side<0?shoot_factor*shoot_start_knee*step_height_factor:0);
+    extra_forward_right+=shoot_active*(shoot_side>0?shoot_factor*shoot_start_knee*step_height_factor:0);
+
+    float shoot_ankle_roll_factor = parabolicReturn(clamp((t+0.5f-shoot_ankle_roll_phase)/max(0.05f,shoot_ankle_roll_time), 0.f, 1.f));
+    float shoot_ankle_roll_left=shoot_active*(shoot_side<0?shoot_ankle_roll_factor*shoot_ankle_roll*step_height_factor:-swing_factor*shoot_support_ankle_roll*step_height_factor);
+    float shoot_ankle_roll_right=shoot_active*(shoot_side>0?-shoot_ankle_roll_factor*shoot_ankle_roll*step_height_factor:swing_factor*shoot_support_ankle_roll*step_height_factor);
+
+    float shoot_body_lean_y=shoot_side*shoot_active*shoot_body_shift_y*swing_factor;
+
+    float footLX=dx_left + body_offset_x + body_shift_x + body_shift_x_correction + shoot_x_left;
+    float footLY=side_left + body_shift_y + body_shift_y_correction + shoot_body_lean_y;
+    float footLA=support_left - dx_left * (stairway_gain * sgn(dx) - stairway_vx_correction);
+
+    float footRX=dx_right + body_offset_x + body_shift_x + body_shift_x_correction + shoot_x_right;
+    float footRY=side_right + body_shift_y + body_shift_y_correction + shoot_body_lean_y;
+    float footRA=support_right - dx_right * (stairway_gain * sgn(dx) - stairway_vx_correction);
+
+    kinematics::LegPositionPlain footL{true, footLX, footLY,footLA, 0.05f, 0.f};
+    kinematics::LegPositionPlain footR{false, footRX, footRY, footRA, 0.05f, 0.f};
+
+    feet = {footL, footR, da_right - da_left - v_angle};
+    float dx_circle=(dx_left-dx_right)*0;//*0.5;
+    float circle_height=sqrt(circle_height_radius*circle_height_radius-dx_circle*dx_circle)-circle_height_radius;
+    kinematics::Joints j = kinematics::InverseKinematics::setFeetRelToPlane(feet, dynamic_body_height+circle_height);
+    num_frame++;
+    // VisTransPtr imuStats = Visualizer::instance().startTransaction({}, "body", ABSOLUTE, NO_REPLACE);
+    // imuStats->addParameter(Parameter::createFloat("pitch", body_pitch));
+    // imuStats->addParameter(Parameter::createFloat("roll", body_roll));
+    // imuStats->addParameter(Parameter::createInt("num_frame", num_frame));
+    // imuStats->addParameter(Parameter::createFloat("footRX", footRX));
+    // imuStats->addParameter(Parameter::createFloat("dx_right", dx_right));
+    // imuStats->addParameter(Parameter::createFloat("dx", dx));
+    // imuStats->addParameter(Parameter::createFloat("body_shift_x", body_shift_x));
+    // imuStats->addParameter(Parameter::createFloat("body_shift_x_correction", body_shift_x_correction));
+    // imuStats->addParameter(Parameter::createFloat("t", t));
+    // imuStats->addParameter(Parameter::createFloat("tSmooth", tSmooth));
+    // imuStats->addParameter(Parameter::createFloat("vx_correction_smooth", vx_correction_smooth));
+    // imuStats->addParameter(Parameter::createFloat("body_pitch_smooth", body_pitch_smooth));
+
+    // Visualizer::instance().commit(imuStats);
 
 
+    LegJoints result = set_joints(waddle_right, waddle_left, shoot_ankle_pitch_right, shoot_ankle_pitch_left, shoot_ankle_roll_right, shoot_ankle_roll_left, extra_forward_right, extra_forward_left, ankle_balancer, step_height, j);
 
-    LegJoints result = set_joints(waddle_right, waddle_left, ankle_balancer, step_height, j);
+    float step_duration_frames=(frames_per_second * (step_duration+step_duration_correction+shoot_active*shoot_duration_increment));
+    t+=1./step_duration_frames;
+    if(tFull<=tClamp||tClamp==1||tFull>tClamp+0.5) {
+        tFull+=1./step_duration_frames;
+    }
+    tClamp=min(t,1.f);
+    if(tClamp<tFull-0.5) {
+        if(tFull<=1) {
+            tSmooth=tFull+tClamp-1;
+        }else {
+            tFull=max(tFull-1.f,tClamp);
+            tSmooth=tClamp;
+        }
+    }else {
+        tSmooth=tClamp;
+    }
+    if(tFull>1&&tClamp==1) {
+        tSmooth=(tFull+tClamp)*0.5;
+    }else if(tFull>tClamp&&tFull<0.5) {
+        tSmooth=(tFull+tClamp)*0.5;
+    }
 
-    t += 1.f / (frames_per_second * (step_duration+step_duration_correction));
     return result;
 }

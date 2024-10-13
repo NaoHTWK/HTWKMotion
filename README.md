@@ -1,9 +1,8 @@
 # HTWKMotion
 
-## INSTALLATION
+Walking engine of the [HTWK Robots](https://htwk.bot/) Robot Soccer Team participating in [RoboCup SPL](https://spl.robocup.org/).
 
-You first need to download [Eigen](http://eigen.tuxfamily.org) and copy it to the `eigen` folder in this release.
-You don't need to modify the `CMakeLists.txt` or any other files.
+## INSTALLATION
 
 The walking engine is designed to be used with our [LolaConnector](https://github.com/NaoHTWK/LolaConnector).
 It also includes some auxiliary libraries for moving the arms and sitting down.
@@ -40,55 +39,59 @@ To build:
 mkdir build
 cd build
 cmake .. -DCMAKE_TOOLCHAIN_FILE=../YOUR-cross-config.cmake
-make
+cmake --build .
 ```
 
-An example `cross-config.cmake` can be found in our LolaConnector project.
+Usage of a custom `cross-config.cmake` is optinal. An example `cross-config.cmake` can be found in our LolaConnector project.
 
-## LICENSE 
+The website for the [Eigen](http://eigen.tuxfamily.org) library seems down, so we include a copy of the library in the `3rdparty/eigen` folder. We also ship a msgpack library in `3rdparty/msgpack` for simplicty of building the project. Feel free to substitute your own libraries if desired.
 
-Copyright (c) 2020 Nao-Team HTWK.  All rights reserved.
+All 3rd party code retains their respective license. The following license only applies to code from team HTWK Robots (formerly Nao-Team HTWK).
 
-Redistribution and use in source and binary forms, with or without 
-modification, are permitted provided that the following conditions 
+## LICENSE
+
+Copyright (c) 2024 HTWK Robots. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
 are met:
 
 1. Redistributions of source code must retain the above copyright
    notice, this list of conditions and the following disclaimer.
 
-2. Redistributions in binary form must reproduce the above 
-   copyright notice, this list of conditions and the following 
-   disclaimer in the documentation and/or other materials provided 
+2. Redistributions in binary form must reproduce the above
+   copyright notice, this list of conditions and the following
+   disclaimer in the documentation and/or other materials provided
    with the distribution.
 
-3. The end-user documentation included with the redistribution, if 
+3. The end-user documentation included with the redistribution, if
    any, must include the following acknowledgment:
-   _"This product includes software developed by Nao-Team HTWK
+   _"This product includes software developed by Team HTWK Robots
    ([htwk-robots.de](http://www.htwk-robots.de))."_
-   Alternately, this acknowledgment may appear in the software 
-   itself, if and wherever such third-party acknowledgments 
+   Alternately, this acknowledgment may appear in the software
+   itself, if and wherever such third-party acknowledgments
    normally appear.
 
-4. For each Nao-Team HTWK code release from which parts are used in
-   a RoboCup competition, the usage shall be announced in the SPL 
-   mailing list (currently robocup-nao@cc.gatech.edu) one month 
+4. For each HTWK Robots code release from which parts are used in
+   a RoboCup competition, the usage shall be announced in the SPL
+   mailing list (currently robocup-nao@cc.gatech.edu) one month
    before the first competition in which you are using it. The
    announcement shall name which parts of this code are used.
 
 5. Bug fixes regarding existing code shall be sent back to
-   Nao-Team HTWK via GitHub pull requests
+   HTWK Robots via GitHub pull requests
    (https://github.com/NaoHTWK).
 
-THIS SOFTWARE IS PROVIDED BY NAO-TEAM HTWK "AS IS" AND ANY
-EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
-THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A 
-PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL 
-NAO-TEAM HTWK NOR ITS MEMBERS BE LIABLE FOR ANY DIRECT, INDIRECT, 
-INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS 
-OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
-WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF 
+THIS SOFTWARE IS PROVIDED BY HTWK Robots "AS IS" AND ANY
+EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+NAO-TEAM HTWK NOR ITS MEMBERS BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 

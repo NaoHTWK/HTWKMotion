@@ -1,6 +1,10 @@
 #pragma once
 
+#include <point_2d.h>
+
 #include <cmath>
+#include <functional>
+#include <tuple>
 
 struct point_3d {
     float x{};
@@ -15,6 +19,11 @@ struct point_3d {
     point_3d& operator=(point_3d&&) = default;
 
     constexpr point_3d(float x, float y, float z) : x(x), y(y), z(z) {}
+    constexpr point_3d(const htwk::point_2d& p, float z) : x(p.x), y(p.y), z(z) {}
+
+    constexpr htwk::point_2d xy() const {
+        return {x, y};
+    }
 
     float norm() const {
         return std::sqrt(x * x + y * y + z * z);
@@ -103,4 +112,20 @@ struct point_3d {
         rhs *= lhs;
         return rhs;
     }
+
+    friend inline bool operator==(const point_3d& lhs, const point_3d& rhs) {
+        return std::tie(lhs.x, lhs.y, lhs.z) == std::tie(rhs.x, rhs.y, rhs.z);
+    }
 };
+
+namespace std {
+template<>
+struct hash<point_3d> {
+    size_t operator()(const point_3d& p) const {
+        size_t h1 = std::hash<float>{}(p.x);
+        size_t h2 = std::hash<float>{}(p.y);
+        size_t h3 = std::hash<float>{}(p.z);
+        return h1 ^ (h2 << 1) ^ (h3 << 2);
+    }
+};
+}

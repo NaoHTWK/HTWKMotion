@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 
 struct Joint {
     float angle = 0.f;
@@ -55,6 +56,11 @@ struct Joints {
     HeadJoints head;
     ArmJoints arms;
     LegJoints legs;
+};
+
+struct JointMaxTemperature {
+    float temperature{-1};
+    std::array<char, 20> name{};
 };
 
 enum class JointCategory { HEAD, ARM, LEG };
@@ -122,9 +128,15 @@ inline void mirrorLtoR(ArmJoints* joints) {
     (*joints)[RHand] = (*joints)[LHand];
 }
 
+enum class Shoot {
+    NONE, LEFT, RIGHT
+};
+
 struct WalkRequest {
     float dx = 0; //!< Movement in [m/s]
     float dy = 0; //!< Movement in [m/s]
     float da = 0; //!< Rotation in [rad/s]
+    Shoot shoot = Shoot::NONE;
     float foot_v_angle = 0; //!< Rotation of the foot, positive V-shaped, negative A-shaped in [rad]
+    bool unsafe = false;  //!< whether to use unsafe speeds (only use in situations where we want to take high risks!)
 };

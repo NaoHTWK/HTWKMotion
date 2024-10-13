@@ -2,7 +2,9 @@
 
 #include <point_2d.h>
 #include <stl_ext.h>
+
 #include <cmath>
+#include <set>
 
 struct Position {
     float x{};
@@ -109,16 +111,29 @@ struct Position {
 
 struct Hypothesis {
     Position p;
-    float qual{0};
+    float qual = 0;
+    // Hypotheses with a high trust can move the robot across the field, medium and low hypotheses have to be close to
+    // the current belief to be used.
+    enum class Trust { HIGH, MEDIUM, LOW };
+    Trust trust = Trust::LOW;
+    float match_dist = 0;  // Distance of the feature the hypothesis is based on. Further away features influence the
+                           // position less than closer ones.
+    std::set<size_t> line_ids;
+    std::set<size_t> point_feature_ids;
 
-    Hypothesis() = default;
-    Hypothesis(const Position& p, float qual) : p(p), qual(qual) {}
-    Hypothesis(float x, float y, float a, float qual) : p(x, y, a), qual(qual) {}
     Hypothesis mirrored() const {
-        return { p.mirrored(), qual };
+        return {.p = p.mirrored(),
+                .qual = qual,
+                .trust = trust,
+                .match_dist = match_dist,
+                .line_ids = line_ids,
+                .point_feature_ids = point_feature_ids};
     }
     void mirror() {
         p.mirror();
+    }
+    int numFeatures() {
+        return line_ids.size() + point_feature_ids.size();
     }
 };
 

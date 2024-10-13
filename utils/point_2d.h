@@ -1,11 +1,13 @@
 #pragma once
 
+#include <stl_ext.h>
+
 #include <cfloat>
 #include <cmath>
 #include <iostream>
 #include <tuple>
 
-#include <stl_ext.h>
+class CamPose;
 
 namespace htwk {
 
@@ -15,7 +17,7 @@ struct point_2d {
 
     point_2d() = default;
     template <typename P>
-    point_2d(const P& p) : x(p.x), y(p.y) {}
+    explicit point_2d(const P& p) : x(p.x), y(p.y) {}
     constexpr point_2d(float x, float y) : x(x), y(y) {}
 
     point_2d& operator+=(const point_2d& rhs) {
@@ -102,11 +104,11 @@ struct point_2d {
         return std::make_tuple(x, y);
     }
 
-    point_2d rotated(float angle) const {
+    [[nodiscard]] point_2d rotated(float angle) const {
         return {x * std::cos(angle) - y * std::sin(angle), x * std::sin(angle) + y * std::cos(angle)};
     }
 
-    point_2d normalized() const {
+    [[nodiscard]] point_2d normalized() const {
         float n = norm();
         if (n == 0)
             return {0, 0};
@@ -129,6 +131,10 @@ struct point_2d {
         return (x - other.x) * (x - other.x) + (y - other.y) * (y - other.y);
     }
 
+    // Angular distance (in rad) between 2 points in relative coordinates. Don't use with absolute coordinates, it won't
+    // work. Convert them to relative first if you need it.
+    float angular_dist(const point_2d& other, const CamPose& cam_pose) const;
+
     friend bool operator==(const point_2d& lhs, const point_2d& rhs) {
         return lhs.x == rhs.x && lhs.y == rhs.y;
     }
@@ -140,6 +146,10 @@ struct point_2d {
     friend std::ostream& operator<<(std::ostream& os, const point_2d& p) {
         os << "(" << p.x << ", " << p.y << ")";
         return os;
+    }
+
+    void print() {
+        printf("x: %f, y: %f\n", x, y);
     }
 };
 
